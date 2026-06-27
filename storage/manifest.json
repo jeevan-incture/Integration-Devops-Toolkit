@@ -1,0 +1,14 @@
+{
+    "IF_Automation_Test": {
+        "package": "CICDAutomation",
+        "name": "IF_Automation_Test",
+        "version": "1.0.2",
+        "last_synced": "2026-06-27T10:07:41.610821+00:00"
+    },
+    "IF_Automation_Test2": {
+        "package": "CICDAutomation",
+        "name": "IF_Automation_Test2",
+        "version": "1.0.0",
+        "last_synced": "2026-06-27T10:07:41.610874+00:00"
+    }
+}

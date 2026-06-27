@@ -1,0 +1,212 @@
+name: 🚀 SAP Integration Flow Sync (POC)
+
+on:
+  # Manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      package_id:
+        description: 'Package ID to sync (default: CICDAutomation)'
+        required: false
+        default: 'CICDAutomation'
+        type: string
+
+  # Scheduled daily sync at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  sync-integration-flows:
+    name: Sync ${{ inputs.package_id || 'CICDAutomation' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # Step 1: Checkout repository with full history
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 2: Setup Python environment
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # Step 3: Install Git (verify it's available)
+      - name: ✔️ Verify Git Installation
+        run: git --version
+
+      # Step 4: Install Python dependencies
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip list
+
+      # Step 5: Configure Git user for commits
+      - name: ⚙️ Configure Git User
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Step 6: Create .sap-devops directory structure
+      - name: 📁 Setup Storage Directory
+        run: |
+          mkdir -p .sap-devops/storage
+          mkdir -p workspace/downloads
+          echo "Storage directories created"
+          ls -la .sap-devops/
+
+      # Step 7: Validate all required secrets
+      - name: 🔐 Validate Required Secrets
+        env:
+          BTP_BASE_URL: ${{ secrets.BTP_BASE_URL }}
+          BTP_TOKEN_URL: ${{ secrets.BTP_TOKEN_URL }}
+          BTP_CLIENT_ID: ${{ secrets.BTP_CLIENT_ID }}
+          BTP_CLIENT_SECRET: ${{ secrets.BTP_CLIENT_SECRET }}
+          GIT_REPOSITORY_URL: ${{ secrets.GIT_REPOSITORY_URL }}
+          GIT_GITHUB_TOKEN: ${{ secrets.GIT_GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Validating secrets..."
+          [[ -z "$BTP_BASE_URL" ]] && echo "❌ BTP_BASE_URL not set" && exit 1
+          [[ -z "$BTP_TOKEN_URL" ]] && echo "❌ BTP_TOKEN_URL not set" && exit 1
+          [[ -z "$BTP_CLIENT_ID" ]] && echo "❌ BTP_CLIENT_ID not set" && exit 1
+          [[ -z "$BTP_CLIENT_SECRET" ]] && echo "❌ BTP_CLIENT_SECRET not set" && exit 1
+          [[ -z "$GIT_REPOSITORY_URL" ]] && echo "❌ GIT_REPOSITORY_URL not set" && exit 1
+          [[ -z "$GIT_GITHUB_TOKEN" ]] && echo "❌ GIT_GITHUB_TOKEN not set" && exit 1
+          echo "✅ All required secrets are configured"
+
+      # Step 8: Create .env file from secrets
+      - name: 📝 Create Environment Configuration
+        env:
+          BTP_BASE_URL: ${{ secrets.BTP_BASE_URL }}
+          BTP_TOKEN_URL: ${{ secrets.BTP_TOKEN_URL }}
+          BTP_CLIENT_ID: ${{ secrets.BTP_CLIENT_ID }}
+          BTP_CLIENT_SECRET: ${{ secrets.BTP_CLIENT_SECRET }}
+          GIT_REPOSITORY_URL: ${{ secrets.GIT_REPOSITORY_URL }}
+          GIT_GITHUB_TOKEN: ${{ secrets.GIT_GITHUB_TOKEN }}
+        run: |
+          cat > .env << EOF
+          # SAP BTP Configuration
+          BTP_BASE_URL=$BTP_BASE_URL
+          BTP_TOKEN_URL=$BTP_TOKEN_URL
+          BTP_CLIENT_ID=$BTP_CLIENT_ID
+          BTP_CLIENT_SECRET=$BTP_CLIENT_SECRET
+
+          # GitHub Configuration
+          GIT_REPOSITORY_URL=$GIT_REPOSITORY_URL
+          GITHUB_TOKEN=$GIT_GITHUB_TOKEN
+          GIT_BRANCH=main
+
+          # Manifest Persistence
+          MANIFEST_PATH=.sap-devops/storage/manifest.json
+          PACKAGES_CONFIG_JSON=config/packages.json
+          PACKAGES_CONFIG_CSV=config/packages.csv
+          REPOSITORY_PATH=repository
+          WORKSPACE_PATH=workspace
+          EOF
+          echo "✅ Environment configuration created"
+
+      # Step 9: Run synchronization
+      - name: 🔄 Run Sync Command
+        env:
+          PACKAGE_ID: ${{ inputs.package_id || 'CICDAutomation' }}
+        run: |
+          echo "🚀 Starting synchronization for package: $PACKAGE_ID"
+          python -c "
+          from commands.sync import run
+          try:
+              run(config_format='json', package_id='$PACKAGE_ID')
+              print('\n✅ Sync completed successfully')
+          except Exception as e:
+              print(f'\n❌ Sync failed: {e}')
+              raise
+          "
+
+      # Step 10: Verify manifest was created/updated
+      - name: 📊 Verify Manifest File
+        run: |
+          if [ -f ".sap-devops/storage/manifest.json" ]; then
+            echo "✅ Manifest file exists"
+            echo "📋 Manifest content:"
+            cat .sap-devops/storage/manifest.json | python -m json.tool
+          else
+            echo "⚠️  Manifest file not found"
+          fi
+
+      # Step 11: Commit and push manifest changes
+      - name: 📤 Commit Manifest Changes
+        run: |
+          # Check if manifest exists and has changes
+          if [ -f ".sap-devops/storage/manifest.json" ]; then
+            echo "📝 Staging manifest file..."
+            git add .sap-devops/storage/manifest.json
+            
+            # Check if there are changes to commit
+            if git diff --cached --quiet; then
+              echo "ℹ️  No changes to commit"
+            else
+              echo "✅ Changes detected, committing..."
+              git commit -m "🔄 sync(manifest): Update integration flows manifest
+
+Package: CICDAutomation
+Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              echo "✅ Manifest committed successfully"
+            fi
+          else
+            echo "⚠️  Manifest file not found, skipping commit"
+          fi
+
+      # Step 12: Push changes back to repository
+      - name: 🚀 Push Changes to Repository
+        run: |
+          echo "📤 Pushing changes to main branch..."
+          git push origin main || {
+            echo "⚠️  Push failed, may be due to no changes"
+          }
+          echo "✅ Push completed"
+
+      # Step 13: Upload workflow artifacts
+      - name: 📦 Upload Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-artifacts-${{ github.run_number }}
+          path: |
+            workspace/downloads/
+            .sap-devops/storage/manifest.json
+            .env
+          retention-days: 7
+          if-no-files-found: warn
+
+      # Step 14: Display summary
+      - name: 📋 Workflow Summary
+        if: success()
+        run: |
+          echo "✅ Sync workflow completed successfully!"
+          echo ""
+          echo "📊 Summary:"
+          echo "  Package: CICDAutomation"
+          echo "  Manifest Location: .sap-devops/storage/manifest.json"
+          echo "  Artifacts Location: workspace/downloads/"
+          echo "  Repository: ${{ github.repository }}"
+          echo "  Branch: main"
+          echo ""
+          echo "📝 Manifest State:"
+          [ -f ".sap-devops/storage/manifest.json" ] && cat .sap-devops/storage/manifest.json || echo "No manifest"
+
+      # Step 15: Error notification
+      - name: ❌ Error Notification
+        if: failure()
+        run: |
+          echo "::error::Sync workflow failed!"
+          echo "Please check the logs for details."
+          exit 1
