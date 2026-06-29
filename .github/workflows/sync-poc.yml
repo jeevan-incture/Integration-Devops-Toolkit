@@ -154,11 +154,13 @@ jobs:
               echo "ℹ️  No changes to commit"
             else
               echo "✅ Changes detected, committing..."
-              git commit -m "🔄 sync(manifest): Update integration flows manifest
+              git commit -m <<'EOF'
+🔄 sync(manifest): Update integration flows manifest
 
 Package: CICDAutomation
 Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+EOF
               echo "✅ Manifest committed successfully"
             fi
           else

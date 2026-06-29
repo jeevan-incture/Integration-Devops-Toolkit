@@ -3,5 +3,10 @@
         "id": "CICDAutomation",
         "name": "CICD Automation Package",
         "description": "Integration flows for CICD automation"
+    },
+    {
+        "id": "IntegrationDevops",
+        "name": "Integration DevOps Package",
+        "description": "Integration flows for DevOps automation"
     }
 ]

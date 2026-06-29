@@ -138,5 +138,14 @@ class GitRepository:
         return message
 
     def cleanup(self) -> None:
-        """Clean up repository resources."""
+        """Clean up repository resources after push."""
+        # try:
+        #     if self.repo_path.exists():
+        #         Logger.info(f"Cleaning up repository at {self.repo_path}")
+        #         shutil.rmtree(self.repo_path)
+        #         Logger.success("Repository cleaned up successfully")
+        #     else:
+        #         Logger.info("Repository folder not found, nothing to clean")
+        # except Exception as e:
+        #     Logger.warning(f"Cleanup warning: {e}")
         pass
