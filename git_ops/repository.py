@@ -47,13 +47,28 @@ class GitRepository:
         return self.repo_url
 
     def init_or_update(self) -> None:
-        """Clone repository or pull latest changes."""
+        """Clone repository or pull latest changes. Re-clone if target exists but isn't a git repo."""
         try:
             if self.repo_path.exists():
-                Logger.info(f"Repository exists at {self.repo_path}")
-                self._pull()
+                git_dir = self.repo_path / ".git"
+                if git_dir.exists():
+                    Logger.info(f"Repository exists at {self.repo_path}")
+                    self._pull()
+                else:
+                    Logger.warning(f"{self.repo_path} exists but is not a git repository; re-cloning")
+                    try:
+                        shutil.rmtree(self.repo_path)
+                    except Exception as e:
+                        raise RuntimeError(f"Failed to remove non-git directory: {e}")
+                    auth_url = self._get_authenticated_url()
+                    subprocess.run(
+                        ["git", "clone", "--branch", self.git_branch, auth_url, str(self.repo_path)],
+                        check=True,
+                        capture_output=True
+                    )
+                    Logger.success("Repository cloned successfully")
             else:
-                Logger.info(f"Cloning repository...")
+                Logger.info("Cloning repository...")
                 auth_url = self._get_authenticated_url()
                 subprocess.run(
                     ["git", "clone", "--branch", self.git_branch, auth_url, str(self.repo_path)],
