@@ -1,7 +1,7 @@
 """
 Manifest management.
 
-Keeps track of synchronized IFlow versions.
+Keeps track of synchronized design-time artifact versions.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ class Manifest:
             Location of the manifest file.
             Defaults to 'storage/manifest.json'.
         """
-
         self.file_path = Path(manifest_path)
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -35,97 +34,110 @@ class Manifest:
         dict
             Existing manifest or an empty dictionary.
         """
-
         if not self.file_path.exists():
             return {}
 
         with self.file_path.open("r", encoding="utf-8") as file:
             return json.load(file)
 
-    def save(self, iflows: list[dict]) -> None:
+    def _normalize_manifest(self, manifest: dict) -> dict:
         """
-        Persist synchronized IFlow versions.
+        Normalize legacy flat manifests into typed sections.
 
-        Rules
-        -----
-        - New IFlows are added.
-        - Draft ('Active') versions never overwrite released versions.
-        - Released versions overwrite previous released versions.
+        Old manifests were a flat mapping of artifact IDs.
+        New manifests group artifacts by type.
         """
+        if not manifest:
+            return {}
 
-        manifest = self.load()
+        if all(
+            isinstance(value, dict)
+            and {"package", "name", "version", "last_synced"}.issubset(value.keys())
+            for value in manifest.values()
+        ):
+            return {"integration_flows": manifest}
 
-        for flow in iflows:
+        return manifest
 
-            flow_id = flow["id"]
-            current_version = flow["version"]
+    def save(self, artifact_type: str, artifacts: list[dict]) -> None:
+        """
+        Persist synchronized artifact versions for a specific artifact type.
 
-            if flow_id not in manifest:
+        Parameters
+        ----------
+        artifact_type : str
+            One of:
+            - "integration_flows"
+            - "message_mappings"
+            - "value_mappings"
+            - "script_collections"
+        artifacts : list[dict]
+            List of artifact metadata dictionaries.
+        """
+        manifest = self._normalize_manifest(self.load())
+        section = manifest.setdefault(artifact_type, {})
 
-                manifest[flow_id] = {
-                    "package": flow["package"],
-                    "name": flow["name"],
+        for artifact in artifacts:
+            artifact_id = artifact["id"]
+            current_version = artifact["version"]
+
+            if artifact_id not in section:
+                section[artifact_id] = {
+                    "package": artifact["package"],
+                    "name": artifact["name"],
                     "version": current_version,
-                    "last_synced": datetime.now(timezone.utc).isoformat()
+                    "last_synced": datetime.now(timezone.utc).isoformat(),
                 }
-
                 continue
 
-            # Ignore draft versions
             if current_version == "Active":
                 continue
 
-            manifest[flow_id]["version"] = current_version
-            manifest[flow_id]["last_synced"] = datetime.now(timezone.utc).isoformat()
+            section[artifact_id]["version"] = current_version
+            section[artifact_id]["last_synced"] = datetime.now(timezone.utc).isoformat()
 
         with self.file_path.open("w", encoding="utf-8") as file:
             json.dump(manifest, file, indent=4)
 
-    def get_iflows_to_sync(self, current_iflows: list[dict]) -> list[dict]:
+    def get_artifacts_to_sync(
+        self, artifact_type: str, current_artifacts: list[dict]
+    ) -> list[dict]:
         """
-        Determine which IFlows require synchronization.
-
-        Rules
-        -----
-        - First execution -> Sync everything.
-        - New IFlow -> Sync.
-        - Active -> Active -> Ignore.
-        - 1.0.1 -> Active -> Ignore.
-        - Active -> 1.0.1 -> Sync.
-        - 1.0.1 -> 1.0.2 -> Sync.
-        - Same released version -> Ignore.
+        Determine which artifacts require synchronization for a specific artifact type.
         """
+        previous = self._normalize_manifest(self.load()).get(artifact_type, {})
 
-        previous = self.load()
-
-        # First execution
         if not previous:
-            for flow in current_iflows:
-                flow["status"] = "INITIAL_SYNC"
-            return current_iflows
+            for artifact in current_artifacts:
+                artifact["status"] = "INITIAL_SYNC"
+            return current_artifacts
 
         pending = []
 
-        for flow in current_iflows:
+        for artifact in current_artifacts:
+            artifact_id = artifact["id"]
+            current_version = artifact["version"]
 
-            flow_id = flow["id"]
-            current_version = flow["version"]
-
-            # Newly created IFlow
-            if flow_id not in previous:
-                flow["status"] = "NEW_IFLOW"
-                pending.append(flow)
+            if artifact_id not in previous:
+                artifact["status"] = "NEW_ARTIFACT"
+                pending.append(artifact)
                 continue
 
-            previous_version = previous[flow_id]["version"]
+            previous_version = previous[artifact_id]["version"]
 
-            # Ignore draft saves
             if current_version == "Active":
                 continue
 
-            # Released version changed
             if previous_version != current_version:
-                flow["status"] = "VERSION_CHANGED"
-                pending.append(flow)
+                artifact["status"] = "VERSION_CHANGED"
+                pending.append(artifact)
 
         return pending
+
+    def save_iflows(self, iflows: list[dict]) -> None:
+        """Compatibility wrapper for existing IFlow sync code."""
+        self.save("integration_flows", iflows)
+
+    def get_iflows_to_sync(self, current_iflows: list[dict]) -> list[dict]:
+        """Compatibility wrapper for existing IFlow sync code."""
+        return self.get_artifacts_to_sync("integration_flows", current_iflows)

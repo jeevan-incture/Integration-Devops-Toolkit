@@ -1,26 +1,38 @@
 {
-    "IF_Automation_Test": {
-        "package": "CICDAutomation",
-        "name": "IF_Automation_Test",
-        "version": "1.0.1",
-        "last_synced": "2026-06-27T13:26:10.433219+00:00"
+    "integration_flows": {
+        "IF_Automation_Test2": {
+            "package": "CICDAutomation",
+            "name": "IF_Automation_Test2",
+            "version": "1.0.1",
+            "last_synced": "2026-07-02T08:13:56.950527+00:00"
+        },
+        "IF_Automation_Test": {
+            "package": "CICDAutomation",
+            "name": "IF_Automation_Test",
+            "version": "1.0.2",
+            "last_synced": "2026-07-02T08:13:56.950551+00:00"
+        },
+        "IF_TEST1": {
+            "package": "IntegrationDevops",
+            "name": "IF_TEST1",
+            "version": "1.0.0",
+            "last_synced": "2026-06-29T13:14:04.882532+00:00"
+        },
+        "IF_TEST2": {
+            "package": "IntegrationDevops",
+            "name": "IF_TEST2",
+            "version": "1.0.0",
+            "last_synced": "2026-06-29T13:14:04.882821+00:00"
+        }
     },
-    "IF_Automation_Test2": {
-        "package": "CICDAutomation",
-        "name": "IF_Automation_Test2",
-        "version": "1.0.0",
-        "last_synced": "2026-06-27T13:26:10.433254+00:00"
+    "message_mappings": {
+        "MM_TestMapping": {
+            "package": "CICDAutomation",
+            "name": "MM_TestMapping",
+            "version": "1.1.2",
+            "last_synced": "2026-07-02T08:13:56.952564+00:00"
+        }
     },
-    "IF_TEST1": {
-        "package": "IntegrationDevops",
-        "name": "IF_TEST1",
-        "version": "1.0.0",
-        "last_synced": "2026-06-27T13:22:19.068838+00:00"
-    },
-    "IF_TEST2": {
-        "package": "IntegrationDevops",
-        "name": "IF_TEST2",
-        "version": "1.0.0",
-        "last_synced": "2026-06-27T13:22:19.068864+00:00"
-    }
+    "value_mappings": {},
+    "script_collections": {}
 }

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -94,8 +95,13 @@ class GitRepository:
                 self._run_git_command("add", file_path)
             Logger.success(f"Staged {len(added_files)} file(s)")
 
-    def commit_and_push(self, iflows: list[dict]) -> bool:
-        """Commit and push changes to GitHub."""
+    def commit_and_push(self, artifacts: list[dict]) -> bool:
+        """Commit and push changes to GitHub.
+
+        `artifacts` is a list of artifact metadata dicts (may include mixed types).
+        Each dict is expected to have at least `id` and `version`; `status` and `package`
+        are used when available.
+        """
         try:
             try:
                 status = self._run_git_command("status", "--porcelain")
@@ -106,7 +112,7 @@ class GitRepository:
                 Logger.info("No changes to commit")
                 return True
 
-            commit_msg = self._generate_commit_message(iflows)
+            commit_msg = self._generate_commit_message(artifacts)
 
             Logger.info("Creating commit...")
             self._run_git_command("commit", "-m", commit_msg)
@@ -122,20 +128,51 @@ class GitRepository:
             Logger.error(f"Commit/Push failed: {e}")
             return False
 
-    def _generate_commit_message(self, iflows: list[dict]) -> str:
-        """Generate descriptive commit message."""
-        flow_details = []
+    def _generate_commit_message(self, artifacts: list[dict]) -> str:
+        """Generate a descriptive commit message for mixed artifact syncs.
 
-        for iflow in iflows:
-            status = iflow.get("status", "SYNC")
-            flow_id = iflow.get("id", "Unknown")
-            version = iflow.get("version", "Unknown")
-            flow_details.append(f"[{status}] {flow_id} v{version}")
+        Message layout:
+        - Title with optional single package name
+        - Summary (total artifacts, status counts)
+        - Up to first 50 artifact detail lines: [STATUS] id vVERSION (package)
+        """
+        total = len(artifacts)
+        packages = sorted({a.get("package") for a in artifacts if a.get("package")})
+        package_desc = packages[0] if len(packages) == 1 else ", ".join(packages) if packages else None
 
-        message = "Sync Integration Flows\n\n"
-        message += "\n".join(flow_details)
+        title = "Sync Design-Time Artifacts"
+        if package_desc:
+            title = f"{title} - {package_desc}"
 
-        return message
+        # Status counts
+        statuses = [a.get("status", "SYNC") for a in artifacts]
+        status_counts = Counter(statuses)
+        counts_lines = [f"{k}: {v}" for k, v in status_counts.items()]
+
+        # Detail lines (limit to 50)
+        detail_lines = []
+        for a in artifacts[:50]:
+            status = a.get("status", "SYNC")
+            aid = a.get("id") or a.get("name") or "Unknown"
+            version = a.get("version", "Unknown")
+            pkg = a.get("package")
+            pkg_part = f" ({pkg})" if pkg else ""
+            detail_lines.append(f"[{status}] {aid} v{version}{pkg_part}")
+
+        if total > 50:
+            detail_lines.append(f"...and {total - 50} more artifacts")
+
+        message_parts = [
+            title,
+            "",
+            f"Total artifacts: {total}",
+            *counts_lines,
+            "",
+            "Details:",
+            *detail_lines
+        ]
+
+        return "\n".join(message_parts)
 
     def cleanup(self) -> None:
         """Clean up repository resources after push."""
